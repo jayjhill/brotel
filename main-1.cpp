@@ -3,7 +3,6 @@
 #include "Adafruit_FONA.h"
 #include "Adafruit_MQTT.h"
 #include "Adafruit_MQTT_FONA.h"
-#include <Adafruit_AHTX0.h>
 #include <ComponentObject.h>
 #include <RangeSensor.h>
 #include <SparkFun_VL53L1X.h>
@@ -11,6 +10,7 @@
 #include <vl53l1_error_codes.h>
 #include <Wire.h>
 #include "SparkFun_VL53L1X.h" 
+#include <Adafruit_AHTX0.h>
 
 /*************************** FONA Pins ***********************************/
 
@@ -25,6 +25,7 @@ Adafruit_FONA fona = Adafruit_FONA(FONA_RST);
 Adafruit_AHTX0 aht;
 
 SFEVL53L1X distanceSensor;
+
 
 /************************* WiFi Access Point *********************************/
 #define FONA_APN       "m2mglobal"
@@ -56,7 +57,7 @@ boolean FONAconnect(const __FlashStringHelper *apn, const __FlashStringHelper *u
 // Notice MQTT paths for AIO follow the form: <username>/feeds/<feedname>
 Adafruit_MQTT_Publish photocell = Adafruit_MQTT_Publish(&mqtt, "sensors/temperature");
 Adafruit_MQTT_Publish humidityPub = Adafruit_MQTT_Publish(&mqtt, "sensors/humidity");
-
+Adafruit_MQTT_Publish depthPub = Adafruit_MQTT_Publish(&mqtt, "sensors/depth");
 
 /*************************** Sketch Code ************************************/
 
@@ -65,7 +66,7 @@ uint8_t txfailures = 0;
 #define MAXTXFAILURES 3
 
 void setup() {
-
+Wire.begin();
   while (!Serial);
 
   // Watchdog is optional!
@@ -76,20 +77,28 @@ void setup() {
   Serial.begin(115200);
 
 
-
-   if (! aht.begin()) {
+    Serial.println("VL53L1X Qwiic Test");
+    if (! aht.begin()) {
     Serial.println("Could not find AHT? Check wiring");
     while (1) delay(10);
   }
   Serial.println("AHT10 or AHT20 found");
 
-    if (distanceSensor.begin() != 0) //Begin returns 0 on a good init
+  if (distanceSensor.begin() != 0) //Begin returns 0 on a good init
   {
     Serial.println("Sensor failed to begin. Please check wiring. Freezing...");
     while (1)
       ;
   }
   Serial.println("Sensor online!");
+
+
+
+   if (! aht.begin()) {
+    Serial.println("Could not find AHT? Check wiring");
+    while (1) delay(10);
+  }
+  Serial.println("AHT10 or AHT20 found");
 
   Serial.println(F("Adafruit FONA MQTT demo"));
 
@@ -117,7 +126,7 @@ void setup() {
 void loop() {
     delay(42000);
 
-//VL53L1X starting
+
   distanceSensor.startRanging(); //Write configuration bytes to initiate measurement
   while (!distanceSensor.checkForDataReady())
   {
@@ -132,12 +141,14 @@ void loop() {
 
   float distanceInches = distance * 0.0393701;
   float distanceFeet = distanceInches / 12.0;
+  float snowDepth = 96.0 - distanceFeet;
 
   Serial.print("\tDistance(ft): ");
   Serial.println(distanceFeet, 2);
 
 
-//AHT20 sensor start
+
+    
 sensors_event_t humidity, temp;
 aht.getEvent(&humidity, &temp);// populate temp and humidity objects with fresh data
 
@@ -176,6 +187,17 @@ aht.getEvent(&humidity, &temp);// populate temp and humidity objects with fresh 
   Serial.print(hum);
   Serial.print("...");
   if (! humidityPub.publish(hum)) {
+    Serial.println(F("Failed"));
+    txfailures++;
+  } else {
+    Serial.println(F("OK!"));
+    txfailures = 0;
+  }
+
+      Serial.print(F("\nSending depthPub val "));
+  Serial.print(snowDepth);
+  Serial.print("...");
+  if (! depthPub.publish(snowDepth)) {
     Serial.println(F("Failed"));
     txfailures++;
   } else {
