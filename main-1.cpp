@@ -4,6 +4,13 @@
 #include "Adafruit_MQTT.h"
 #include "Adafruit_MQTT_FONA.h"
 #include <Adafruit_AHTX0.h>
+#include <ComponentObject.h>
+#include <RangeSensor.h>
+#include <SparkFun_VL53L1X.h>
+#include <vl53l1x_class.h>
+#include <vl53l1_error_codes.h>
+#include <Wire.h>
+#include "SparkFun_VL53L1X.h" 
 
 /*************************** FONA Pins ***********************************/
 
@@ -17,6 +24,7 @@ Adafruit_FONA fona = Adafruit_FONA(FONA_RST);
 
 Adafruit_AHTX0 aht;
 
+SFEVL53L1X distanceSensor;
 
 /************************* WiFi Access Point *********************************/
 #define FONA_APN       "m2mglobal"
@@ -75,6 +83,14 @@ void setup() {
   }
   Serial.println("AHT10 or AHT20 found");
 
+    if (distanceSensor.begin() != 0) //Begin returns 0 on a good init
+  {
+    Serial.println("Sensor failed to begin. Please check wiring. Freezing...");
+    while (1)
+      ;
+  }
+  Serial.println("Sensor online!");
+
   Serial.println(F("Adafruit FONA MQTT demo"));
 
   //mqtt.subscribe(&onoffbutton);
@@ -100,6 +116,28 @@ void setup() {
 
 void loop() {
     delay(42000);
+
+//VL53L1X starting
+  distanceSensor.startRanging(); //Write configuration bytes to initiate measurement
+  while (!distanceSensor.checkForDataReady())
+  {
+    delay(1);
+  }
+  int distance = distanceSensor.getDistance(); //Get the result of the measurement from the sensor
+  distanceSensor.clearInterrupt();
+  distanceSensor.stopRanging();
+
+  Serial.print("Distance(mm): ");
+  Serial.print(distance);
+
+  float distanceInches = distance * 0.0393701;
+  float distanceFeet = distanceInches / 12.0;
+
+  Serial.print("\tDistance(ft): ");
+  Serial.println(distanceFeet, 2);
+
+
+//AHT20 sensor start
 sensors_event_t humidity, temp;
 aht.getEvent(&humidity, &temp);// populate temp and humidity objects with fresh data
 
